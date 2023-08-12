@@ -59,7 +59,14 @@ contract VestingVault is Ownable, ReentrancyGuard {
      * @param _maxPrice Value of 1 RMetis in Metis at or after the end of the vesting period * PRICE_PRECISION
      * @dev The msg.value should exactly match the sum in the merkle tree
      */
-	constructor(bytes32 _merkleRoot, uint256 _airdropDurationDays, uint256 _startDate, uint256 _endDate, uint256 _minPrice, uint256 _maxPrice) payable {
+	constructor(
+        bytes32 _merkleRoot,
+        uint256 _airdropDurationDays,
+        uint256 _startDate,
+        uint256 _endDate,
+        uint256 _minPrice,
+        uint256 _maxPrice
+    ) payable {
 		rMetis = new RMetis(msg.value); // create the redemption token, mints the msg.value to `this`
         merkleRoot = _merkleRoot;
         claimDeadline = block.timestamp + _airdropDurationDays;
