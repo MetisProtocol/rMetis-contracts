@@ -1,1 +1,2 @@
 import './snapshot';
+import './merkle';
