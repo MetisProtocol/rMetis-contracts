@@ -6,6 +6,8 @@ import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+// import Pausable below
+import "@openzeppelin/contracts/security/Pausable.sol";
 
 import "../ERC20/RMetis.sol";
 
@@ -14,7 +16,7 @@ import "../ERC20/RMetis.sol";
  * @dev A contract for managing the vesting of RMetis tokens, including claim and redeem functionalities.
  * @author Rami Husami (gh: @t0mcr8se)
  */
-contract VestingVault is Ownable, ReentrancyGuard {
+contract VestingVault is Ownable, ReentrancyGuard, Pausable {
 	using SafeMath for uint256;
 
 	// Redemption token parameters
@@ -33,6 +35,7 @@ contract VestingVault is Ownable, ReentrancyGuard {
 	uint256 public totalSlashed; // total amount of slashed tokens, added for analytical purposes
 
 	uint256 public constant PRICE_PRECISION = 10000; // precision for the price ratio
+	uint256 public constant DAY_SECONDS = 24 * 60 * 60;
 
 	/// @notice Event emitted when a claim is successful
 	event Claimed(address indexed account, uint256 amount);
@@ -65,41 +68,61 @@ contract VestingVault is Ownable, ReentrancyGuard {
 		uint256 _minPrice,
 		uint256 _maxPrice
 	) {
+		rMetis = new RMetis(); // create the redemption token, mints and equal amount to the msg.value to `this`
 		merkleRoot = _merkleRoot;
-		claimDeadline = block.timestamp + _airdropDurationDays;
+		claimDeadline = block.timestamp + _airdropDurationDays * DAY_SECONDS;
+		require(claimDeadline > block.timestamp, "VestingVault: Invalid airdrop duration.");
 
+		require(_startDate < _endDate, "VestingVault: Invalid vesting period.");
 		startDate = _startDate;
 		endDate = _endDate;
+
+		require(minPrice <= maxPrice && maxPrice <= PRICE_PRECISION, "VestingVault: Invalid price range.");
 		minPrice = _minPrice;
 		maxPrice = _maxPrice;
 	}
 
 	/**
-	 * @notice Modifier to check if the initial deposit and miniting of rMetis is completed
-	 */
-	modifier afterDeposit() {
-		require(address(rMetis) != address(0), "VestingVault: Deposit not completed.");
-		_;
-	}
-
-	/**
-	 * @notice Redeem rMetis tokens for Metis tokens
+	 * @notice Desposit the funds, mint the rMetis tokens to `this`
 	 * @dev The msg.value should exactly match the sum in the merkle tree
 	 */
 	function deposit() external payable onlyOwner {
-		require(address(rMetis) == address(0), "VestingVault: Deposit already completed.");
-		rMetis = new RMetis(msg.value); // create the redemption token, mints and equal amount to the msg.value to `this`
+		rMetis.mint(msg.value); // Mint an equal amount of msg.value to `this`
+	}
+
+	/**
+	 * @notice Pause the contract
+	 * @dev This function can be only called by the owner
+	 */
+	function pause() external onlyOwner {
+		_pause();
+	}
+
+	/**
+	 * @notice Unpause the contract
+	 * @dev This function can be only called by the owner
+	 */
+	function unPause() external onlyOwner {
+		_unpause();
+	}
+
+	/**
+	 * @notice Recovers the funds sent to the contract in case of an emergency
+	 * @dev This function can be only called by the owner
+	 */
+	function emergencyRecoverToken(address _token, uint256 _amount) external onlyOwner {
+		IERC20(_token).transfer(msg.sender, _amount);
 	}
 
 	/**
 	 * @notice Claim rMetis tokens from the airdrop
 	 * @param amount Amount of rMetis tokens to claim
-	 * @param index Index of the address in the merkle tree
 	 * @param merkleProof Merkle proof of the address
 	 */
-	function claim(uint256 amount, uint256 index, bytes32[] calldata merkleProof) external afterDeposit {
+	function claim(uint256 amount, bytes32[] calldata merkleProof) external whenNotPaused {
 		// Verify the merkle proof.
-		bytes32 node = keccak256(abi.encodePacked(index, msg.sender, amount));
+		// hash twice because @openzeppelin/merkle-tree hashes the leaf twice, use abi.encode for same reason;
+		bytes32 node = keccak256(abi.encodePacked(keccak256(abi.encode(msg.sender, amount))));
 
 		require(block.timestamp < claimDeadline, "VestingVault: Claim deadline has passed.");
 		require(MerkleProof.verify(merkleProof, merkleRoot, node), "VestingVault: Invalid proof.");
@@ -116,7 +139,7 @@ contract VestingVault is Ownable, ReentrancyGuard {
 	 * @notice Claim the remaining rMetis tokens after the vesting period is over
 	 * @dev This function can be only called by the owner after the claiming period is over to recover the unclaimable rMetis tokens
 	 */
-	function claimOwner() external onlyOwner afterDeposit {
+	function claimOwner() external onlyOwner {
 		require(block.timestamp >= claimDeadline, "VestingVault: Claim deadline has not passed.");
 
 		uint256 amount = rMetis.balanceOf(address(this));
@@ -161,7 +184,7 @@ contract VestingVault is Ownable, ReentrancyGuard {
 	 * @notice The owner of this contract can redeem rMetis tokens for Metis always at a price ration of 1 to 1
 	 * @param amount Amount of rMetis tokens to redeem
 	 */
-	function redeem(uint256 amount) external nonReentrant afterDeposit {
+	function redeem(uint256 amount) external nonReentrant whenNotPaused {
 		require(block.timestamp >= startDate, "VestingVault: Vesting period has not started.");
 		require(amount > 0, "VestingVault: Amount must be greater than 0.");
 		require(rMetis.balanceOf(msg.sender) >= amount, "VestingVault: Insufficient rMetis balance.");
@@ -176,7 +199,7 @@ contract VestingVault is Ownable, ReentrancyGuard {
 	 * @notice Redeem slashed Metis tokens
 	 * @dev This function can be only called by the owner to recover the slashed Metis tokens
 	 */
-	function redeemSlashed() external onlyOwner nonReentrant afterDeposit {
+	function redeemSlashed() external onlyOwner nonReentrant {
 		uint256 amount = currentSlashed;
 		currentSlashed = 0;
 		payable(msg.sender).transfer(amount);

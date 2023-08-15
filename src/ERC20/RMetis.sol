@@ -2,21 +2,18 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
  * @title RMetis
  * @dev A specialized ERC20 token representing ReMetis Token (rMetis)
  * @author Rami Husami (gh: @t0mcr8se)
  */
-contract RMetis is ERC20 {
-	
+contract RMetis is ERC20, Ownable {
 	/**
 	 * @notice Construct the RMetis token
-	 * @param _maxSupply Maximum supply of the RMetis token
 	 */
-	constructor(uint256 _maxSupply) ERC20("ReMetis Token", "rMetis") {
-		_mint(msg.sender, _maxSupply);
-	}
+	constructor() ERC20("ReMetis Token", "rMetis") {}
 
 	/**
 	 * @notice Burn tokens from the caller
@@ -26,4 +23,11 @@ contract RMetis is ERC20 {
 		_burn(msg.sender, amount);
 	}
 
+	/**
+	 * @notice Mint tokens to the owner
+	 * @param amount Amount of tokens to mint
+	 */
+	function mint(uint256 amount) external onlyOwner {
+		_mint(msg.sender, amount);
+	}
 }
