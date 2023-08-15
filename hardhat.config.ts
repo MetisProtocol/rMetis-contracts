@@ -71,6 +71,10 @@ const config: HardhatUserConfig = {
 			url: node_url('metis'),
 			accounts: accounts('metis'),
 		},
+		metisgoerli: {
+			url: node_url('metisgoerli'),
+			accounts: accounts('metisgoerli'),
+		},
 		bsc: {
 			url: node_url('bsc'),
 			accounts: accounts('bsc'),
