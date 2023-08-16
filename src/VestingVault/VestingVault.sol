@@ -175,8 +175,8 @@ contract VestingVault is Ownable, ReentrancyGuard, Pausable {
 		rMetis.burn(amount);
 		payable(sender).transfer(metisAmount);
 
-		currentSlashed = currentSlashed.add(metisAmount.sub(amount));
-		totalSlashed = totalSlashed.add(metisAmount.sub(amount));
+		currentSlashed = currentSlashed.add(amount.sub(metisAmount));
+		totalSlashed = totalSlashed.add(amount.sub(metisAmount));
 	}
 
 	/**
