@@ -51,5 +51,5 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 	});
 };
 export default func;
-func.id = 'deploy_voting_system'; // id required to prevent reexecution
-func.tags = ['VotingSystem', 'VotingToken'];
+func.id = 'deploy_vesting-vault'; // id required to prevent reexecution
+func.tags = ['VestingVault', 'RMetis'];

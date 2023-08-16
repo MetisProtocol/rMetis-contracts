@@ -33,7 +33,6 @@ const config: HardhatUserConfig = {
 	namedAccounts: {
 		deployer: 0,
 		owner: 0,
-		voter: 1,
 	},
 	networks: addForkConfiguration({
 		hardhat: {

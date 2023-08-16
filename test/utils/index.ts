@@ -23,3 +23,12 @@ export async function setupUser<T extends {[contractName: string]: BaseContract}
 	}
 	return user as {address: string} & T;
 }
+
+export async function increaseSeconds(seconds: number | bigint): Promise<void> {
+	await ethers.provider.send('evm_increaseTime', [seconds]);
+	await ethers.provider.send('evm_mine', []);
+}
+
+export async function blockTimestamp(): Promise<number | undefined> {
+	return (await ethers.provider.getBlock('latest'))?.timestamp;
+}
