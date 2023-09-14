@@ -21,8 +21,8 @@ const config: HardhatUserConfig = {
 		compilers: [
 			{
 				version: '0.8.17',
-				evmVersion: "berlin",
 				settings: {
+					evmVersion: 'berlin',
 					optimizer: {
 						enabled: true,
 						runs: 2000,
