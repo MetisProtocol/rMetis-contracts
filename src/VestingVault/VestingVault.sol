@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-// import Pausable below
 import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/access/Ownable2Step.sol";
 
 import "../ERC20/RMetis.sol";
 
@@ -16,20 +15,20 @@ import "../ERC20/RMetis.sol";
  * @dev A contract for managing the vesting of RMetis tokens, including claim and redeem functionalities.
  * @author Rami Husami (gh: @t0mcr8se)
  */
-contract VestingVault is Ownable, ReentrancyGuard, Pausable {
+contract VestingVault is Ownable2Step, ReentrancyGuard, Pausable {
 	using SafeMath for uint256;
 
 	// Redemption token parameters
 	RMetis public rMetis; // RMetis token
-	bytes32 public merkleRoot; // merkle root of the merkle tree for the airdrop
-	uint256 public claimDeadline; // deadline for claiming the redemption tokens
+	bytes32 public immutable merkleRoot; // merkle root of the merkle tree for the airdrop
+	uint256 public immutable claimDeadline; // deadline for claiming the redemption tokens
 	mapping(address => bool) public claimed; // has this address claimed their rMetis tokens?
 
 	// Vesting parameters
-	uint256 public startDate; // start date of the vesting period
-	uint256 public endDate; // end date of the vesting period
-	uint256 public minPrice; // value of 1 RMetis in Metis at the start of the vesting period * 10000
-	uint256 public maxPrice; // value of 1 RMetis in Metis at or after the end of the vesting period * 10000
+	uint256 public immutable startDate; // start date of the vesting period
+	uint256 public immutable endDate; // end date of the vesting period
+	uint256 public immutable minPrice; // value of 1 RMetis in Metis at the start of the vesting period * 10000
+	uint256 public immutable maxPrice; // value of 1 RMetis in Metis at or after the end of the vesting period * 10000
 
 	uint256 public currentSlashed; // amount of slashed tokens, resets everytime redeemSlashed is called
 	uint256 public totalSlashed; // total amount of slashed tokens, added for analytical purposes
@@ -77,7 +76,7 @@ contract VestingVault is Ownable, ReentrancyGuard, Pausable {
 		startDate = _startDate;
 		endDate = _endDate;
 
-		require(minPrice <= maxPrice && maxPrice <= PRICE_PRECISION, "VestingVault: Invalid price range.");
+		require(_minPrice <= _maxPrice && _maxPrice <= PRICE_PRECISION, "VestingVault: Invalid price range.");
 		minPrice = _minPrice;
 		maxPrice = _maxPrice;
 	}
@@ -87,6 +86,7 @@ contract VestingVault is Ownable, ReentrancyGuard, Pausable {
 	 * @dev The msg.value should exactly match the sum in the merkle tree
 	 */
 	function deposit() external payable onlyOwner {
+		require(msg.value > 0, "Deposit should be non-zero");
 		rMetis.mint(msg.value); // Mint an equal amount of msg.value to `this`
 	}
 
