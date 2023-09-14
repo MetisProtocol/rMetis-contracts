@@ -40,7 +40,7 @@ describe('VestingVault', () => {
 	let vestingVault: VestingVault;
 	let vestingAddress: string;
 
-	let airdropDurationDays: number;
+	let claimDeadline: number;
 	let startDate: number;
 	let endDate: number;
 	let minPrice: bigint;
@@ -57,15 +57,15 @@ describe('VestingVault', () => {
 
 		const VestingVaultFactory = new VestingVault__factory(owner);
 
-		airdropDurationDays = 7;
 		startDate = (await blockTimestamp()) as number;
+		claimDeadline = startDate + 7 * DAY_SECONDS;
 		endDate = startDate + 1000 * DAY_SECONDS;
 		minPrice = BigInt(5000);
 		maxPrice = BigInt(10000);
 
 		vestingVault = await VestingVaultFactory.deploy(
 			merkleTree.root,
-			airdropDurationDays,
+			claimDeadline,
 			startDate,
 			endDate,
 			minPrice,

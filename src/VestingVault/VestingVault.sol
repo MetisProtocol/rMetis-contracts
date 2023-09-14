@@ -52,7 +52,7 @@ contract VestingVault is Ownable2Step, ReentrancyGuard, Pausable {
 	 * @notice Initialize the contract and deposit the funds
 	 * @notice The funds will be used to redeem rMetis tokens for Metis
 	 * @param _merkleRoot Merkle root of the merkle tree for the airdrop
-	 * @param _airdropDurationDays Duration of the airdrop in days
+	 * @param _claimDeadline Deadline for claiming rMetis airdrop
 	 * @param _startDate Start date of the vesting period
 	 * @param _endDate End date of the vesting period
 	 * @param _minPrice Value of 1 RMetis in Metis at the start of the vesting period * PRICE_PRECISION
@@ -61,7 +61,7 @@ contract VestingVault is Ownable2Step, ReentrancyGuard, Pausable {
 	 */
 	constructor(
 		bytes32 _merkleRoot,
-		uint256 _airdropDurationDays,
+		uint256 _claimDeadline,
 		uint256 _startDate,
 		uint256 _endDate,
 		uint256 _minPrice,
@@ -69,7 +69,7 @@ contract VestingVault is Ownable2Step, ReentrancyGuard, Pausable {
 	) {
 		rMetis = new RMetis(); // create the redemption token, mints and equal amount to the msg.value to `this`
 		merkleRoot = _merkleRoot;
-		claimDeadline = block.timestamp + _airdropDurationDays * DAY_SECONDS;
+		claimDeadline = _claimDeadline;
 		require(claimDeadline > block.timestamp, "VestingVault: Invalid airdrop duration.");
 
 		require(_startDate < _endDate, "VestingVault: Invalid vesting period.");
