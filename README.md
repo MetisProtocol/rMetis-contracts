@@ -1,4 +1,38 @@
-# Boilerplate for metis solidity smart contract development
+## Technical Specification: VestingVault Contract
+
+## Overview:
+
+The `VestingVault` contract aims to manage the distribution and vesting of RMetis tokens. It provides functionality to claim and redeem these tokens over a specified duration.
+
+### 4. Key Functionality:
+
+-   Managing the airdrop of rMetis tokens to users.
+-   The airdrop will have a deadline, after which the contract owner can claim any unclaimed tokens.
+-   The snapshot will be loaded onto a merkle tree, and the merkle root will be stored on-chain.
+-   The merkle leaf will be hashed twice, following the `@openzeppelin/merkle-tree` structure: keccak256(abi.encodePacked(keccak256(abi.encode(recipient, amount)))).
+-   The merkle proof will be validated on-chain to ensure that only legitimate users can claim the tokens.
+-   The contract owner can pause and unpause the contract's functionalities.
+-   The owner can set the deadline of the airdrop and the vesting period only at the deployment transaction.
+-   The owner can set the minimum and maximum price of RMetis tokens only at the deployment transaction.
+-   The price will change linearly from the minimum to the maximum price over the vesting period.
+-   The holder of `amountRMetis` of rMetis token can redeem it for `amountMetis` of Metis token, where `amountMetis = amountRMetis * priceRatio()`.
+-   slashedAmount <- (`amountMetis` - `amountRMetis`)
+-   The owner can withdraw the slashed tokens.
+-   The owner can withdraw any remaining rMetis tokens after the airdrop deadline.
+-   The owner can redeem rMetis tokens for Metis tokens at a 1:1 ratio always.
+-   The owner can recover any ERC20 tokens sent to the contract by mistake.
+-   The users cannot claim when the contract is paused.
+-   The users cannot redeem when the contract is paused.
+-   The owner can always deposit metis tokens to the contract.
+-   The RMetis contract is an ERC20 standard token with minting and burning capabilities.
+-   The owner of RMetis contract is the VestingVault contract.
+-   The VestingVault contract will be able to mint rMetis tokens and store them.### 6. Tests:
+
+### 7. Security Measures:
+
+-   The contract employs `ReentrancyGuard` to protect against recursive attacks by malicious users.
+-   `Pausable` allows the owner to halt contract operations in case of any detected vulnerabilities.
+-   Provides a merkle-proof based validation for token claims to ensure only legitimate users can claim the tokens.
 
 ## INSTALL
 
@@ -18,130 +52,8 @@ There are 3 flavors of tests: hardhat, dapptools and forge
 yarn test
 ```
 
-### [dapptools](https://dapp.tools)
+### Deploy
 
 ```bash
-dapp test
+yarn hardhat deploy --network metisgoerli
 ```
-
-The latter requires additional step to set up your machine:
-
-Install dapptools (Following instruction [here](https://github.com/dapphub/dapptools#installation)):
-
-```bash
-# user must be in sudoers
-curl -L https://nixos.org/nix/install | sh
-
-# Run this or login again to use Nix
-. "$HOME/.nix-profile/etc/profile.d/nix.sh"
-
-curl https://dapp.tools/install | sh
-```
-
-Then install solc with the correct version:
-
-```bash
-nix-env -f https://github.com/dapphub/dapptools/archive/master.tar.gz -iA solc-static-versions.solc_0_8_9
-```
-
-### forge
-
-```bash
-forge test
-```
-
-This require the installation of forge (see [foundry](https://github.com/gakonst/foundry))
-
-## SCRIPTS
-
-Here is the list of npm scripts you can execute:
-
-Some of them relies on [./\_scripts.js](./_scripts.js) to allow parameterizing it via command line argument (have a look inside if you need modifications)
-<br/><br/>
-
-### `yarn prepare`
-
-As a standard lifecycle npm script, it is executed automatically upon install. It generate config file and typechain to get you started with type safe contract interactions
-<br/><br/>
-
-### `yarn format` and `yarn format:fix`
-
-These will format check your code. the `:fix` version will modifiy the files to match the requirement specified in `.prettierrc.`
-<br/><br/>
-
-### `yarn compile`
-
-These will compile your contracts
-<br/><br/>
-
-### `yarn void:deploy`
-
-This will deploy your contracts on the in-memory hardhat network and exit, leaving no trace. quick way to ensure deployments work as intended without consequences
-<br/><br/>
-
-### `yarn test [mocha args...]`
-
-These will execute your tests using mocha. you can pass extra arguments to mocha
-<br/><br/>
-
-### `yarn coverage`
-
-These will produce a coverage report in the `coverage/` folder
-<br/><br/>
-
-### `yarn gas`
-
-These will produce a gas report for function used in the tests
-<br/><br/>
-
-### `yarn dev`
-
-These will run a local hardhat network on `localhost:8545` and deploy your contracts on it. Plus it will watch for any changes and redeploy them.
-<br/><br/>
-
-### `yarn local:dev`
-
-This assumes a local node it running on `localhost:8545`. It will deploy your contracts on it. Plus it will watch for any changes and redeploy them.
-<br/><br/>
-
-### `yarn execute <network> <file.ts> [args...]`
-
-This will execute the script `<file.ts>` against the specified network
-<br/><br/>
-
-### `yarn deploy <network> [args...]`
-
-This will deploy the contract on the specified network.
-
-Behind the scene it uses `hardhat deploy` command so you can append any argument for it
-<br/><br/>
-
-### `yarn export <network> <file.json>`
-
-This will export the abi+address of deployed contract to `<file.json>`
-<br/><br/>
-
-### `yarn fork:execute <network> [--blockNumber <blockNumber>] [--deploy] <file.ts> [args...]`
-
-This will execute the script `<file.ts>` against a temporary fork of the specified network
-
-if `--deploy` is used, deploy scripts will be executed
-<br/><br/>
-
-### `yarn fork:deploy <network> [--blockNumber <blockNumber>] [args...]`
-
-This will deploy the contract against a temporary fork of the specified network.
-
-Behind the scene it uses `hardhat deploy` command so you can append any argument for it
-<br/><br/>
-
-### `yarn fork:test <network> [--blockNumber <blockNumber>] [mocha args...]`
-
-This will test the contract against a temporary fork of the specified network.
-<br/><br/>
-
-### `yarn fork:dev <network> [--blockNumber <blockNumber>] [args...]`
-
-This will deploy the contract against a fork of the specified network and it will keep running as a node.
-
-Behind the scene it uses `hardhat node` command so you can append any argument for it

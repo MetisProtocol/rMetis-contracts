@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import {HardhatUserConfig} from 'hardhat/types';
 
+import '@nomicfoundation/hardhat-toolbox';
 import '@nomicfoundation/hardhat-chai-matchers';
 import '@nomicfoundation/hardhat-ethers';
 import '@typechain/hardhat';
@@ -11,6 +12,7 @@ import 'hardhat-deploy';
 import 'hardhat-deploy-ethers';
 import 'hardhat-deploy-tenderly';
 import '@nomicfoundation/hardhat-verify';
+import './tasks';
 
 import {node_url, accounts, addForkConfiguration} from './utils/network';
 
@@ -19,6 +21,7 @@ const config: HardhatUserConfig = {
 		compilers: [
 			{
 				version: '0.8.17',
+				evmVersion: "berlin",
 				settings: {
 					optimizer: {
 						enabled: true,
@@ -31,7 +34,6 @@ const config: HardhatUserConfig = {
 	namedAccounts: {
 		deployer: 0,
 		owner: 0,
-		voter: 1,
 	},
 	networks: addForkConfiguration({
 		hardhat: {
@@ -68,6 +70,14 @@ const config: HardhatUserConfig = {
 		metis: {
 			url: node_url('metis'),
 			accounts: accounts('metis'),
+		},
+		metisgoerli: {
+			url: node_url('metisgoerli'),
+			accounts: accounts('metisgoerli'),
+		},
+		bsc: {
+			url: node_url('bsc'),
+			accounts: accounts('bsc'),
 		},
 	}),
 	paths: {
