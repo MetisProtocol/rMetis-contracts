@@ -7,88 +7,89 @@ import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/access/Ownable2Step.sol";
+import "@openzeppelin/contracts/token/ERC1155/presets/ERC1155PresetMinterPauser.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import "../ERC20/RMetis.sol";
 
 /**
  * @title VestingVault
- * @dev A contract for managing the vesting of RMetis tokens, including claim and redeem functionalities.
+ * @dev A contract for managing the claiming of allocated metis token and vesting of RMetis tokens, including claim and redeem functionalities.
  * @author Rami Husami (gh: @t0mcr8se)
  */
 contract VestingVault is Ownable2Step, ReentrancyGuard, Pausable {
 	using SafeMath for uint256;
 
+	struct RedeemInfo {
+		uint256 redeemAmount; // Metis amount to receive when vesting has ended
+		uint256 redeemEnd;
+  	}
+
 	// Redemption token parameters
-	RMetis public rMetis; // RMetis token
+	address public constant METIS_TOKEN = 0xDeadDeAddeAddEAddeadDEaDDEAdDeaDDeAD0000;
+	ERC1155PresetMinterPauser public immutable rMetis; // redeemed Metis token
 	bytes32 public immutable merkleRoot; // merkle root of the merkle tree for the airdrop
 	uint256 public immutable claimDeadline; // deadline for claiming the redemption tokens
-	mapping(address => bool) public claimed; // has this address claimed their rMetis tokens?
+	mapping(address => uint256) public claimed; // the amount of rMetis tokens this user has claimed
+
+	// User redeems info
+	mapping(uint256 => RedeemInfo) redeems; // redeemId to redeem info
+	uint256 public redeemsCnt = 0;
 
 	// Vesting parameters
-	uint256 public immutable startDate; // start date of the vesting period
-	uint256 public immutable endDate; // end date of the vesting period
 	uint256 public immutable minPrice; // value of 1 RMetis in Metis at the start of the vesting period * 10000
 	uint256 public immutable maxPrice; // value of 1 RMetis in Metis at or after the end of the vesting period * 10000
+	uint256 public immutable minRedeemLength; // The shortest possible period of vesting
+	uint256 public immutable maxRedeemLength; // The maximum possible period of vesting
 
 	uint256 public currentSlashed; // amount of slashed tokens, resets everytime redeemSlashed is called
 	uint256 public totalSlashed; // total amount of slashed tokens, added for analytical purposes
 
-	uint256 public constant PRICE_PRECISION = 10000; // precision for the price ratio
-	uint256 public constant DAY_SECONDS = 24 * 60 * 60;
+	uint256 public constant PRICE_PRECISION = 10000; // precision for the price ratio	
 
 	/// @notice Event emitted when a claim is successful
-	event Claimed(address indexed account, uint256 amount);
+	event Claimed(address indexed account, uint256 indexed redeemId, uint256 amountRedeemed, uint256 redeemEnd);
 
 	/// @notice Event emitted when the owner claims remaining tokens
 	event ClaimedOwner(address indexed account, uint256 amount);
 
 	/// @notice Event emitted when rMetis tokens are redeemed for Metis tokens
-	event Redeemed(address indexed account, uint256 rMetisAmount, uint256 ratio);
+	event Redeemed(address indexed account, uint256 indexed redeemId, uint256 redeemAmount);
 
 	/// @notice Event emitted when the owner redeems slashed tokens
 	event RedeemedSlashed(address indexed account, uint256 amount, uint256 totalSlashed);
 
 	/**
-	 * @notice Initialize the contract and deposit the funds
-	 * @notice The funds will be used to redeem rMetis tokens for Metis
-	 * @param _merkleRoot Merkle root of the merkle tree for the airdrop
-	 * @param _claimDeadline Deadline for claiming rMetis airdrop
-	 * @param _startDate Start date of the vesting period
-	 * @param _endDate End date of the vesting period
-	 * @param _minPrice Value of 1 RMetis in Metis at the start of the vesting period * PRICE_PRECISION
-	 * @param _maxPrice Value of 1 RMetis in Metis at or after the end of the vesting period * PRICE_PRECISION
-	 * @dev The msg.value should exactly match the sum in the merkle tree
+	 * @notice Initialize the contract
+	 * @param merkleRoot_ Merkle root of the merkle tree for the airdrop
+	 * @param claimDeadline_ Deadline for claiming rMetis airdrop
+	 * @param minPrice_ Value of 1 RMetis in Metis at the start of the vesting period * PRICE_PRECISION
+	 * @param maxPrice_ Value of 1 RMetis in Metis at or after the end of the vesting period * PRICE_PRECISION
+	 * @param minRedeemLength_ The shortest possible period of vesting
+	 * @param maxRedeemLength_; // The maximum possible period of vesting
 	 */
 	constructor(
-		bytes32 _merkleRoot,
-		uint256 _claimDeadline,
-		uint256 _startDate,
-		uint256 _endDate,
-		uint256 _minPrice,
-		uint256 _maxPrice
+		bytes32 merkleRoot_,
+		uint256 claimDeadline_,
+		uint256 minPrice_,
+		uint256 maxPrice_,
+		uint256 minRedeemLength_,
+		uint256 maxRedeemLength_
 	) {
-		rMetis = new RMetis(); // create the redemption token, mints and equal amount to the msg.value to `this`
-		merkleRoot = _merkleRoot;
-		claimDeadline = _claimDeadline;
-		require(claimDeadline > block.timestamp, "VestingVault: Invalid airdrop duration.");
+		require(claimDeadline_ > block.timestamp, "VestingVault: Invalid airdrop duration.");
+		require(minPrice_ <= maxPrice_ && maxPrice_ <= PRICE_PRECISION, "VestingVault: Invalid price range.");
+		require(minRedeemLength_ < maxRedeemLength_, "VestingVault: Invalid redeem length bounds");
 
-		require(_startDate < _endDate, "VestingVault: Invalid vesting period.");
-		startDate = _startDate;
-		endDate = _endDate;
+		rMetis = new ERC1155PresetMinterPauser(""); // create the redemption token
+		merkleRoot = merkleRoot_;
+		claimDeadline = claimDeadline_;
 
-		require(_minPrice <= _maxPrice && _maxPrice <= PRICE_PRECISION, "VestingVault: Invalid price range.");
-		minPrice = _minPrice;
-		maxPrice = _maxPrice;
+		minPrice = minPrice_;
+		maxPrice = maxPrice_;
+		minRedeemLength = minRedeemLength_;
+		maxRedeemLength = maxRedeemLength_;
 	}
-
-	/**
-	 * @notice Desposit the funds, mint the rMetis tokens to `this`
-	 * @dev The msg.value should exactly match the sum in the merkle tree
-	 */
-	function deposit() external payable onlyOwner {
-		require(msg.value > 0, "Deposit should be non-zero");
-		rMetis.mint(msg.value); // Mint an equal amount of msg.value to `this`
-	}
+ 
+	receive() external payable {}
 
 	/**
 	 * @notice Pause the contract
@@ -110,100 +111,73 @@ contract VestingVault is Ownable2Step, ReentrancyGuard, Pausable {
 	 * @notice Recovers the funds sent to the contract in case of an emergency
 	 * @dev This function can be only called by the owner
 	 */
-	function emergencyRecoverToken(address _token, uint256 _amount) external onlyOwner {
-		IERC20(_token).transfer(msg.sender, _amount);
+	function emergencyRecoverToken(address token, uint256 amount) external onlyOwner {
+		IERC20(token).transfer(_msgSender(), amount);
 	}
 
 	/**
 	 * @notice Claim rMetis tokens from the airdrop
-	 * @param amount Amount of rMetis tokens to claim
-	 * @param merkleProof Merkle proof of the address
+	 * @param amount Amount of metis tokens allocated
+	 * @param merkleProof Merkle proof array for the msg.sender address
+	 * @param claimAmount Amount of allocated metis tokens to start redeeming
+	 * @param redeemEnd The end timestamp for the redeem
 	 */
-	function claim(uint256 amount, bytes32[] calldata merkleProof) external whenNotPaused {
+	function claim(uint256 amount, bytes32[] calldata merkleProof, uint256 claimAmount, uint256 redeemEnd) external whenNotPaused {
 		// Verify the merkle proof.
 		// hash twice because @openzeppelin/merkle-tree hashes the leaf twice, use abi.encode for same reason;
-		bytes32 node = keccak256(abi.encodePacked(keccak256(abi.encode(msg.sender, amount))));
+		bytes32 node = keccak256(abi.encodePacked(keccak256(abi.encode(_msgSender(), amount))));
 
+		// Check time requiremets
 		require(block.timestamp < claimDeadline, "VestingVault: Claim deadline has passed.");
+		require(redeemEnd.sub(block.timestamp) >= minRedeemLength, "VestingVault: Redeem end shorter than minRedeemLength");
+		require(redeemEnd.sub(block.timestamp) <= maxRedeemLength, "VestingVault: Redeem end shorter than minRedeemLength");
+		// Check merkle proof validity
 		require(MerkleProof.verify(merkleProof, merkleRoot, node), "VestingVault: Invalid proof.");
-		require(!claimed[msg.sender], "VestingVault: Drop already claimed.");
+		// Check amount requirements
+		require(claimed[_msgSender()].add(claimAmount) <= amount, "VestingVault: Drop already claimed.");
+		require(claimAmount > 0, "Claim Amount can't be zero");
 
-		// Mark it claimed and send the token.
-		claimed[msg.sender] = true;
-		rMetis.transfer(msg.sender, amount);
 
-		emit Claimed(msg.sender, amount);
+		// Mark it claimed
+		claimed[_msgSender()] += claimAmount;		
+		uint256 redeemAmount = priceRatioAt(redeemEnd, block.timestamp).mul(claimAmount).div(PRICE_PRECISION);
+		
+		redeems[++redeemsCnt] = RedeemInfo({
+			redeemAmount: redeemAmount,
+			redeemEnd: redeemEnd
+		});
+
+		rMetis.mint(_msgSender(), redeemsCnt, claimAmount, "");
+		emit Claimed(_msgSender(), redeemsCnt, redeemAmount, redeemEnd);
 	}
 
-	/**
-	 * @notice Claim the remaining rMetis tokens after the vesting period is over
-	 * @dev This function can be only called by the owner after the claiming period is over to recover the unclaimable rMetis tokens
+ 	/**
+	 * @notice Calculate the price ratio at `timestamp`
+	 * @param timestamp The end date of the vesting
+	 * @param startDate the start date of the vesting
+	 * @return price ratio
 	 */
-	function claimOwner() external onlyOwner {
-		require(block.timestamp >= claimDeadline, "VestingVault: Claim deadline has not passed.");
-
-		uint256 amount = rMetis.balanceOf(address(this));
-		rMetis.transfer(msg.sender, amount);
-
-		emit ClaimedOwner(msg.sender, amount);
-	}
-
-	/**
-	 * @notice Calculate the current price ratio
-	 * @return Current price ratio
-	 */
-	function priceRatio() public view returns (uint256) {
-		if (block.timestamp < startDate) {
+	function priceRatioAt(uint256 timestamp, uint256 startDate) public view returns (uint256) {
+		if (timestamp < startDate) {
 			return 0;
 		} else {
-			uint256 timePassed = block.timestamp - startDate;
-			uint256 timeTotal = endDate - startDate;
+			uint256 timePassed = timestamp - startDate;
+			uint256 timeTotal = maxRedeemLength;
 			uint256 priceDiff = maxPrice - minPrice;
 			return Math.min(minPrice + priceDiff.mul(timePassed).div(timeTotal), maxPrice);
-		}
+		}	
 	}
 
 	/**
-	 * @notice Redeem rMetis tokens for Metis according to the price ratio at the time
-	 * @param sender Address of the rMetis token holder
-	 * @param amount Amount of rMetis tokens to redeem
+	 * @notice Redeem metis tokens after the vesting period ends
+	 * @param redeemId The id of the redemption
+	 * @param amount The amount to redeem
+	 * @dev this contract must be approved by user `msg.sender` to spend all
 	 */
-	function _redeem(address sender, uint256 amount, uint256 ratio) internal {
-		uint256 metisAmount = amount.mul(ratio).div(PRICE_PRECISION);
-
-		rMetis.transferFrom(sender, address(this), amount);
-		rMetis.burn(amount);
-		payable(sender).transfer(metisAmount);
-
-		currentSlashed = currentSlashed.add(amount.sub(metisAmount));
-		totalSlashed = totalSlashed.add(amount.sub(metisAmount));
+	function redeem(uint256 redeemId, uint256 amount) public nonReentrant {
+		require(redeems[redeemId].redeemEnd >= block.timestamp, "VestingVault: wait for the end of redemption");
+		rMetis.burn(_msgSender(), redeemId, amount);
+		IERC20(METIS_TOKEN).transfer(_msgSender(), amount);
 	}
 
-	/**
-	 * @notice Redeem rMetis tokens for Metis according to the price ratio at the time
-	 * @notice The owner of this contract can redeem rMetis tokens for Metis always at a price ration of 1 to 1
-	 * @param amount Amount of rMetis tokens to redeem
-	 */
-	function redeem(uint256 amount) external nonReentrant whenNotPaused {
-		require(block.timestamp >= startDate, "VestingVault: Vesting period has not started.");
-		require(amount > 0, "VestingVault: Amount must be greater than 0.");
-		require(rMetis.balanceOf(msg.sender) >= amount, "VestingVault: Insufficient rMetis balance.");
-
-		uint256 ratio = msg.sender == owner() ? PRICE_PRECISION : priceRatio(); // The owner of this contract can redeem rMetis tokens for Metis always at a price ration of 1 to 1
-		_redeem(msg.sender, amount, ratio);
-
-		emit Redeemed(msg.sender, amount, ratio);
-	}
-
-	/**
-	 * @notice Redeem slashed Metis tokens
-	 * @dev This function can be only called by the owner to recover the slashed Metis tokens
-	 */
-	function redeemSlashed() external onlyOwner nonReentrant {
-		uint256 amount = currentSlashed;
-		currentSlashed = 0;
-		payable(msg.sender).transfer(amount);
-
-		emit RedeemedSlashed(msg.sender, amount, totalSlashed);
-	}
 }
