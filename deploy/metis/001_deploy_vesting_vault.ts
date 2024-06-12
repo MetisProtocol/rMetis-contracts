@@ -11,13 +11,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 	const {deploy, save} = hre.deployments;
 
 	const merkleTree = StandardMerkleTree.load(
-		JSON.parse(
-			fs.readFileSync(
-				'snapshots/merkle-bsc-0xe552Fb52a4F19e44ef5A967632DBc320B0820639-11170743-29591664-no-contracts.json',
-				// 'snapshots/merkle-dev-snapshot.json',
-				'utf-8'
-			)
-		)
+		JSON.parse(fs.readFileSync('snapshots/merkle-lp-snapshot.json', 'utf-8'))
 	);
 
 	const rootHash = merkleTree.root;
@@ -30,8 +24,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
 	const {AIRDROP_DEADLINE, REDEMPTION_START_DATE, REDEMPTION_END_DATE, MIN_PRICE, MAX_PRICE} = process.env;
 
-	console.log({AIRDROP_DEADLINE, REDEMPTION_START_DATE, REDEMPTION_END_DATE, MIN_PRICE, MAX_PRICE});
-
 	await deploy('VestingVault', {
 		from: deployer,
 		args: [rootHash, AIRDROP_DEADLINE, REDEMPTION_START_DATE, REDEMPTION_END_DATE, MIN_PRICE, MAX_PRICE],
@@ -41,10 +33,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
 	// Save rMetis token
 	const vestingVaultContract = await ethers.getContract<VestingVault>('VestingVault', deployer);
-
-	// // Optional: deposit, most likely will be done from safe
-	// // await vestingVaultContract.deposit({value: sum.toString(), gasLimit: 1000000});
-
 	const rMetisAddress = await vestingVaultContract.rMetis();
 
 	await save('RMetis', {
