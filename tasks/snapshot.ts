@@ -14,6 +14,7 @@ task('snapshot', 'Generates snapshot of token holders')
 		const {ethers, network} = hre;
 
 		const ankr = new AnkrProvider(ANKR_API_URI ?? '');
+		console.log('ankr initiated', {ANKR_API_URI});
 
 		let pageToken = undefined,
 			accounts: Record<string, BigNumber> = {},
@@ -22,11 +23,13 @@ task('snapshot', 'Generates snapshot of token holders')
 		const stream = fs.createWriteStream(`snapshots/${network.name}-${token}-${startblock}-${endblock}.json`, {
 			flags: 'w',
 		});
+		console.log({token, startblock, endblock});
 
 		do {
 			// Relentless
 			let response: GetLogsReply;
 			try {
+				console.log(`Requesting page ${pageToken}`);
 				// use ankr_getLogs instead of eth_getLogs to avoid rate limiting
 				response = await ankr.getLogs({
 					blockchain: network.name as Blockchain,
@@ -39,6 +42,7 @@ task('snapshot', 'Generates snapshot of token holders')
 					pageToken,
 				});
 			} catch (e) {
+				console.log({e});
 				continue;
 			}
 
