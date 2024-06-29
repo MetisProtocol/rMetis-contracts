@@ -21,7 +21,7 @@ const config: HardhatUserConfig = {
 		compilers: [
 			{
 				version: '0.8.17',
-				evmVersion: "berlin",
+				evmVersion: 'berlin',
 				settings: {
 					optimizer: {
 						enabled: true,
@@ -70,6 +70,10 @@ const config: HardhatUserConfig = {
 		metis: {
 			url: node_url('metis'),
 			accounts: accounts('metis'),
+		},
+		metisSepolia: {
+			url: node_url('metissepolia'),
+			accounts: accounts('metissepolia'),
 		},
 		metisgoerli: {
 			url: node_url('metisgoerli'),

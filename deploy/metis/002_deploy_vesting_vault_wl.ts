@@ -1,7 +1,7 @@
 import {HardhatRuntimeEnvironment} from 'hardhat/types';
 import {DeployFunction} from 'hardhat-deploy/types';
 import {StandardMerkleTree} from '@openzeppelin/merkle-tree';
-import {VestingVault} from '../../typechain-types';
+import {VestingVaultWL} from '../../typechain-types';
 import fs from 'fs';
 import {formatEther} from 'ethers';
 
@@ -13,8 +13,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 	const merkleTree = StandardMerkleTree.load(
 		JSON.parse(
 			fs.readFileSync(
-				'snapshots/merkle-bsc-0xe552Fb52a4F19e44ef5A967632DBc320B0820639-11170743-29591664.json',
-				// 'snapshots/merkle-dev-snapshot.json',
+				// 'snapshots/merkle-full-lp-snapshot-0.json',
+				'snapshots/merkle-full-lp-snapshot-0dev.json',
 				'utf-8'
 			)
 		)
@@ -30,23 +30,18 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
 	const {AIRDROP_DURATION_DAYS, REDEMPTION_START_DATE, REDEMPTION_END_DATE, MIN_PRICE, MAX_PRICE} = process.env;
 
-	await deploy('VestingVault', {
+	await deploy('VestingVaultWL', {
 		from: deployer,
 		args: [rootHash, AIRDROP_DURATION_DAYS, REDEMPTION_START_DATE, REDEMPTION_END_DATE, MIN_PRICE, MAX_PRICE],
 		log: true,
 		autoMine: true, // speed up deployment on local network (ganache, hardhat), no effect on live networks
 	});
 
-	// Save rMetis token
-	const vestingVaultContract = await ethers.getContract<VestingVault>('VestingVault', deployer);
+	const vvwl = await ethers.getContract<VestingVaultWL>('VestingVaultWL', deployer);
+	const rmetis = await vvwl.rMetis();
 
-	// Optional: deposit, most likely will be done from safe
-	// await vestingVaultContract.deposit({value: sum.toString(), gasLimit: 1000000});
-
-	const rMetisAddress = await vestingVaultContract.rMetis();
-
-	await save('RMetis', {
-		address: rMetisAddress,
+	await save('RMetisWL', {
+		address: rmetis,
 		abi: (await artifacts.readArtifact('RMetis')).abi,
 	});
 };
